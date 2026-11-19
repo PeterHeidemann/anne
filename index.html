@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Teleprompter + camera – Twintig jaar Anna</title>
+<style>
+  :root { --fs: 30px; --area: 42%; --opacity: .55; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: #000; color: #fff; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
+
+  #cam { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); background: #111; }
+
+  /* tekstvak bovenin, vlak onder de frontcamera */
+  #prompt { position: fixed; left: 0; right: 0; top: 0; height: var(--area); overflow: hidden; touch-action: none;
+    background: rgba(0,0,0,var(--opacity)); z-index: 2;
+    -webkit-mask-image: linear-gradient(#000 80%, transparent); mask-image: linear-gradient(#000 80%, transparent); }
+  #scroller { position: absolute; left: 0; right: 0; top: 0; will-change: transform;
+    padding: 0 calc(18px + env(safe-area-inset-right)) 0 calc(18px + env(safe-area-inset-left)); }
+  .text { font-size: var(--fs); line-height: 1.4; font-weight: 700; text-shadow: 0 1px 3px #000; }
+  .intro { color: #ffd166; }
+  .num { display: block; font-size: .5em; color: #bbb; margin-top: 1.2em; letter-spacing: .1em; }
+  .line { display: block; margin-bottom: .12em; }
+  .finale { color: #ff7b54; font-weight: 800; }
+  .end { color: #999; font-size: .55em; margin-top: 1.5em; }
+  #guide { position: fixed; left: 0; right: 0; height: 0; z-index: 3; pointer-events: none; }
+  #guide::before, #guide::after { content: ""; position: absolute; top: -9px; border: 9px solid transparent; }
+  #guide::before { left: 2px; border-left-color: #ffd166; }
+  #guide::after { right: 2px; border-right-color: #ffd166; }
+
+  #rec { position: fixed; z-index: 6; top: calc(8px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right));
+    display: none; align-items: center; gap: 6px; background: rgba(0,0,0,.6); padding: 4px 10px; border-radius: 20px;
+    font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #rec i { width: 10px; height: 10px; border-radius: 50%; background: #ff3b30; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .2; } }
+
+  #bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+    padding: 10px calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
+    background: rgba(15,15,15,.88); border-top: 1px solid #333; transition: transform .3s, opacity .3s; }
+  #bar.hidden { transform: translateY(110%); opacity: 0; pointer-events: none; }
+  .row { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
+  .row label { width: 72px; font-size: 13px; color: #aaa; }
+  .row input[type=range] { flex: 1; accent-color: #ffd166; height: 26px; }
+  .row .val { width: 36px; text-align: right; font-size: 13px; color: #ddd; font-variant-numeric: tabular-nums; }
+  .btns { display: flex; gap: 8px; margin-top: 8px; }
+  button { flex: 1; font-size: 16px; font-weight: 600; padding: 12px 6px; border-radius: 12px; border: 0; background: #333; color: #fff; }
+  button.primary { background: #ffd166; color: #000; flex: 2; }
+  button.recbtn { background: #ff3b30; color: #fff; flex: 2; }
+  button:disabled { opacity: .4; }
+
+  #stopBtn { position: fixed; z-index: 6; left: 50%; transform: translateX(-50%);
+    bottom: calc(24px + env(safe-area-inset-bottom)); width: 72px; height: 72px; border-radius: 50%;
+    border: 4px solid #fff; background: rgba(0,0,0,.3); display: none; padding: 0; flex: none; }
+  #stopBtn span { display: block; width: 28px; height: 28px; margin: auto; border-radius: 6px; background: #ff3b30; }
+
+  #count { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    font-size: 140px; font-weight: 800; color: #ffd166; z-index: 7; background: rgba(0,0,0,.45); }
+
+  .overlay { position: fixed; inset: 0; z-index: 10; background: #000; display: none; flex-direction: column;
+    padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); }
+  .overlay.show { display: flex; }
+  .overlay h2 { margin: 0 0 10px; font-size: 20px; }
+  .overlay p { color: #ccc; font-size: 15px; line-height: 1.45; margin: 0 0 12px; }
+  #playback { flex: 1; min-height: 0; width: 100%; background: #111; border-radius: 12px; }
+  #saveHelp { font-size: 13px; color: #999; margin-top: 8px; }
+  #startScreen { justify-content: center; text-align: center; }
+  #startScreen button { flex: none; width: 100%; margin-top: 12px; }
+  #err { color: #ff7b54; }
+</style>
+</head>
+<body>
+<video id="cam" autoplay playsinline muted></video>
+
+<div id="prompt">
+  <div id="scroller">
+    <div class="text">
+      <span class="line intro">Twintig jaar Anna als Saxion-collega.</span>
+      <span class="line intro">In één minuut. Here we go …</span>
+
+      <span class="num">1</span>
+      <span class="line">Al twintig jaar mijn collega, we kennen elkaar zo goed,</span>
+      <span class="line">Van Meetingpoint naar ICTO, jij wist precies hoe alles moet!</span>
+      <span class="line">Toen door naar TLC en CLEI, een eindeloos verhaal,</span>
+      <span class="line">Maar jij bleef rots in de branding en overleefde het allemaal!</span>
+
+      <span class="num">2</span>
+      <span class="line">Hoe onstuimig Saxion ook werd, hoe druk het soms ook was,</span>
+      <span class="line">Weer een nieuwe manager, weer een plan? Jij liep gewoon in je eigen pas!</span>
+      <span class="line">In goede en in slechte tijden stond jij altijd voor me klaar,</span>
+      <span class="line">En ook privé geen geheimen, we wisten alles van elkaar!</span>
+
+      <span class="num">3</span>
+      <span class="line">We kletsten over kinderen, kleinkinderen en natuurlijk BWO,</span>
+      <span class="line">En over de fratsen van onze honden, ja, dat ging dan zomaar zo!</span>
+      <span class="line">En zat mijn kraag weer eens scheef, dan merkte jij dat op:</span>
+      <span class="line">Een scherpe blik, een snelle hint, en alles was weer top!</span>
+
+      <span class="num">4</span>
+      <span class="line">Toen kwam het thuiswerken, Teams, ieder in z’n eigen huis,</span>
+      <span class="line">Maar één belletje met jou en ik voelde me weer thuis!</span>
+      <span class="line">Al die jaren hield je stand, had je alles in het vizier,</span>
+      <span class="line">Je was mijn anker in de storm…</span>
+      <span class="line finale">maar nu is het: EVEN TOT HIER!</span>
+
+      <div class="end">— einde —</div>
+    </div>
+  </div>
+</div>
+<div id="guide"></div>
+<div id="rec"><i></i><span id="recTime">0:00</span></div>
+<div id="count"></div>
+<button id="stopBtn" aria-label="Stop opname"><span></span></button>
+
+<div id="bar">
+  <div class="row"><label>Snelheid</label><input id="speed" type="range" min="10" max="150" step="2"><span class="val" id="speedV"></span></div>
+  <div class="row"><label>Letters</label><input id="size" type="range" min="18" max="56" step="1"><span class="val" id="sizeV"></span></div>
+  <div class="row"><label>Tekstvak</label><input id="area" type="range" min="25" max="70" step="1"><span class="val" id="areaV"></span></div>
+  <div class="row"><label>Donker</label><input id="dark" type="range" min="0" max="90" step="5"><span class="val" id="darkV"></span></div>
+  <div class="btns">
+    <button id="reset">⏮ Begin</button>
+    <button id="practice">▶ Oefen</button>
+    <button id="record" class="recbtn">● Opnemen</button>
+  </div>
+</div>
+
+<div class="overlay show" id="startScreen">
+  <h2>Teleprompter met camera</h2>
+  <p>Houd de iPhone rechtop. De tekst staat bovenin, vlak onder de camera,<br>zodat het lijkt alsof je in de lens kijkt.</p>
+  <p id="err"></p>
+  <button class="primary" id="enableCam">Camera en microfoon aanzetten</button>
+</div>
+
+<div class="overlay" id="review">
+  <h2>Je opname</h2>
+  <video id="playback" controls playsinline></video>
+  <div class="btns">
+    <button id="again">↺ Opnieuw</button>
+    <button id="save" class="primary">⬇ Bewaar video</button>
+  </div>
+  <div id="saveHelp">Kies bij “Bewaar video” voor <b>Bewaar video</b> in het deelmenu, dan komt hij in Foto’s.</div>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const store = {
+    get(k, d){ try { const v = localStorage.getItem('tpcam-'+k); return v === null ? d : JSON.parse(v); } catch(e){ return d; } },
+    set(k, v){ try { localStorage.setItem('tpcam-'+k, JSON.stringify(v)); } catch(e){} }
+  };
+  const root = document.documentElement;
+  const prompt = $('prompt'), scroller = $('scroller'), bar = $('bar');
+
+  let speed = store.get('speed', 36), size = store.get('size', 30), area = store.get('area', 42), dark = store.get('dark', 55);
+  let pos = 0, playing = false, last = 0, counting = false;
+  let stream = null, recorder = null, chunks = [], recStart = 0, recTimer = null, videoBlob = null, mime = '';
+  let wakeLock = null;
+
+  // ---------- weergave ----------
+  function guideY(){ return prompt.clientHeight * 0.28; }
+  function maxPos(){ return Math.max(0, scroller.scrollHeight - prompt.clientHeight * 0.2); }
+  function render(){
+    scroller.style.transform = 'translateY(' + (guideY() - pos) + 'px)';
+    $('guide').style.top = (prompt.getBoundingClientRect().top + guideY() + size * 0.7) + 'px';
+  }
+  function apply(){
+    root.style.setProperty('--fs', size + 'px');
+    root.style.setProperty('--area', area + '%');
+    root.style.setProperty('--opacity', dark / 100);
+    $('speedV').textContent = speed; $('sizeV').textContent = size; $('areaV').textContent = area; $('darkV').textContent = dark;
+    requestAnimationFrame(render);
+  }
+  [['speed', v => speed = v], ['size', v => size = v], ['area', v => area = v], ['dark', v => dark = v]].forEach(([id, set]) => {
+    const el = $(id); el.value = ({speed, size, area, dark})[id];
+    el.addEventListener('input', () => { set(+el.value); store.set(id, +el.value); apply(); });
+  });
+  apply();
+
+  // ---------- scrollen ----------
+  function tick(t){
+    if (!playing) return;
+    const dt = last ? (t - last) / 1000 : 0; last = t;
+    pos += speed * dt;
+    if (pos >= maxPos()) { pos = maxPos(); render(); playing = false; return; }
+    render(); requestAnimationFrame(tick);
+  }
+  function startScroll(){ playing = true; last = 0; requestAnimationFrame(tick); }
+  function stopScroll(){ playing = false; }
+
+  function countdown(cb){
+    if (counting) return; counting = true;
+    const c = $('count'); let n = 3; c.textContent = n; c.style.display = 'flex'; bar.classList.add('hidden');
+    const iv = setInterval(() => {
+      n--; if (n > 0) { c.textContent = n; return; }
+      clearInterval(iv); c.style.display = 'none'; counting = false; cb();
+    }, 800);
+  }
+
+  async function keepAwake(on){
+    try {
+      if (on && 'wakeLock' in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request('screen');
+      if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch(e){ wakeLock = null; }
+  }
+
+  // ---------- camera ----------
+  $('enableCam').addEventListener('click', async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1080 }, height: { ideal: 1920 } },
+        audio: { echoCancellation: true, noiseSuppression: true }
+      });
+      $('cam').srcObject = stream;
+      $('startScreen').classList.remove('show');
+      render();
+    } catch(e) {
+      $('err').textContent = (location.protocol !== 'https:' && location.hostname !== 'localhost')
+        ? 'De camera werkt alleen als deze pagina via https:// geopend is (bijv. via Netlify of GitHub Pages).'
+        : 'Geen toegang tot camera/microfoon. Sta het toe via de “aA”-knop in de adresbalk → Website-instellingen, en probeer opnieuw.';
+    }
+  });
+
+  // ---------- oefenen (zonder opname) ----------
+  $('practice').addEventListener('click', e => {
+    e.stopPropagation();
+    if (pos > 5) { bar.classList.add('hidden'); keepAwake(true); startScroll(); return; }
+    keepAwake(true); countdown(startScroll);
+  });
+  $('reset').addEventListener('click', e => { e.stopPropagation(); stopScroll(); pos = 0; render(); });
+
+  // ---------- opnemen ----------
+  function pickMime(){
+    const opts = ['video/mp4;codecs=avc1,mp4a', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
+    for (const m of opts) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch(e){} }
+    return '';
+  }
+  $('record').addEventListener('click', e => {
+    e.stopPropagation();
+    if (!stream) { $('startScreen').classList.add('show'); return; }
+    if (typeof MediaRecorder === 'undefined') { alertBox('Opnemen wordt in deze browser niet ondersteund. Gebruik Safari op iOS 14.3 of nieuwer.'); return; }
+    stopScroll(); pos = 0; render(); keepAwake(true);
+    countdown(() => {
+      mime = pickMime(); chunks = [];
+      try { recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); }
+      catch(err) { recorder = new MediaRecorder(stream); }
+      mime = recorder.mimeType || mime || 'video/mp4';
+      recorder.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data); };
+      recorder.onstop = showReview;
+      recorder.start(1000);
+      recStart = Date.now();
+      $('rec').style.display = 'flex'; $('stopBtn').style.display = 'block';
+      recTimer = setInterval(() => {
+        const s = Math.floor((Date.now() - recStart) / 1000);
+        $('recTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+      }, 250);
+      startScroll();
+    });
+  });
+  function stopRecording(){
+    stopScroll(); clearInterval(recTimer);
+    $('rec').style.display = 'none'; $('stopBtn').style.display = 'none';
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    keepAwake(false);
+  }
+  $('stopBtn').addEventListener('click', e => { e.stopPropagation(); stopRecording(); });
+
+  function showReview(){
+    videoBlob = new Blob(chunks, { type: mime.split(';')[0] });
+    const pb = $('playback');
+    pb.src = URL.createObjectURL(videoBlob);
+    $('review').classList.add('show');
+  }
+  $('again').addEventListener('click', () => {
+    $('review').classList.remove('show'); $('playback').pause();
+    pos = 0; render(); bar.classList.remove('hidden');
+  });
+  $('save').addEventListener('click', async () => {
+    if (!videoBlob) return;
+    const ext = mime.includes('webm') ? 'webm' : 'mp4';
+    const file = new File([videoBlob], 'anna-20-jaar.' + ext, { type: videoBlob.type });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Twintig jaar Anna' });
+        return;
+      }
+    } catch(err) { if (err && err.name === 'AbortError') return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(videoBlob); a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    $('saveHelp').textContent = 'De video staat nu bij Downloads in de Bestanden-app. Open hem daar en kies Deel → Bewaar video om hem in Foto’s te zetten.';
+  });
+
+  function alertBox(msg){ $('err').textContent = msg; $('startScreen').classList.add('show'); }
+
+  // ---------- tikken en slepen in het tekstvak ----------
+  let touchY = null, moved = false;
+  prompt.addEventListener('touchstart', e => { touchY = e.touches[0].clientY; moved = false; }, { passive: true });
+  prompt.addEventListener('touchmove', e => {
+    if (touchY === null) return;
+    const y = e.touches[0].clientY, d = touchY - y; touchY = y;
+    if (d) moved = true;
+    pos = Math.max(0, Math.min(maxPos(), pos + d)); render();
+  }, { passive: true });
+  prompt.addEventListener('touchend', () => { touchY = null; if (!moved) tap(); });
+  prompt.addEventListener('click', () => { if (!('ontouchstart' in window)) tap(); });
+  $('cam').addEventListener('click', tap);
+  prompt.addEventListener('wheel', e => { pos = Math.max(0, Math.min(maxPos(), pos + e.deltaY)); render(); }, { passive: true });
+
+  function tap(){
+    if (counting) return;
+    const isRec = recorder && recorder.state === 'recording';
+    if (isRec) { playing ? stopScroll() : startScroll(); return; }  // tijdens opname: alleen tekst pauzeren
+    if (playing) { stopScroll(); bar.classList.remove('hidden'); keepAwake(false); }
+    else bar.classList.toggle('hidden');
+  }
+
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && (playing || recorder?.state === 'recording')) keepAwake(true); });
+  window.addEventListener('resize', render);
+  window.addEventListener('orientationchange', () => setTimeout(render, 300));
+  render();
+})();
+</script>
+</body>
+</html>

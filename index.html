@@ -242,8 +242,9 @@
     stopScroll(); pos = 0; render(); keepAwake(true);
     countdown(() => {
       mime = pickMime(); chunks = [];
-      try { recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); }
-      catch(err) { recorder = new MediaRecorder(stream); }
+      const recStream = portraitStream();
+      try { recorder = mime ? new MediaRecorder(recStream, { mimeType: mime, videoBitsPerSecond: 6000000 }) : new MediaRecorder(recStream); }
+      catch(err) { recorder = new MediaRecorder(recStream); }
       mime = recorder.mimeType || mime || 'video/mp4';
       recorder.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data); };
       recorder.onstop = showReview;
@@ -257,7 +258,33 @@
       startScroll();
     });
   });
+  // ---------- altijd staand (9:16) opnemen ----------
+  // Het camerabeeld wordt op een staand canvas getekend (midden uitgesneden),
+  // en dát canvas wordt opgenomen, samen met het geluid van de microfoon.
+  const OUT_W = 1080, OUT_H = 1920;
+  let canvas = null, ctx = null, drawing = false;
+  function portraitStream(){
+    canvas = document.createElement('canvas');
+    canvas.width = OUT_W; canvas.height = OUT_H;
+    ctx = canvas.getContext('2d');
+    drawing = true; drawFrame();
+    const cs = canvas.captureStream(30);
+    stream.getAudioTracks().forEach(t => cs.addTrack(t));
+    return cs;
+  }
+  function drawFrame(){
+    if (!drawing) return;
+    const v = $('cam'), vw = v.videoWidth, vh = v.videoHeight;
+    if (vw && vh) {
+      const scale = Math.max(OUT_W / vw, OUT_H / vh);       // 'cover': vullen en midden uitsnijden
+      const dw = vw * scale, dh = vh * scale;
+      ctx.drawImage(v, (OUT_W - dw) / 2, (OUT_H - dh) / 2, dw, dh);
+    }
+    requestAnimationFrame(drawFrame);
+  }
+
   function stopRecording(){
+    drawing = false;
     stopScroll(); clearInterval(recTimer);
     $('rec').style.display = 'none'; $('stopBtn').style.display = 'none';
     if (recorder && recorder.state !== 'inactive') recorder.stop();

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Teleprompter + camera – Twintig jaar Anna</title>
+<title>Teleprompter + camera – Twintig jaar Anne</title>
 <style>
   :root { --fs: 30px; --area: 42%; --opacity: .55; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -76,7 +76,7 @@
 <div id="prompt">
   <div id="scroller">
     <div class="text">
-      <span class="line intro">Twintig jaar Anna als Saxion-collega.</span>
+      <span class="line intro">Twintig jaar Anne als Saxion-collega.</span>
       <span class="line intro">In één minuut. Here we go …</span>
 
       <span class="num">1</span>
@@ -101,8 +101,8 @@
       <span class="line">Toen kwam het thuiswerken, Teams, ieder in z’n eigen huis,</span>
       <span class="line">Maar één belletje met jou en ik voelde me weer thuis!</span>
       <span class="line">Al die jaren hield je stand, had je alles in het vizier,</span>
-      <span class="line">Je was mijn anker in de storm…</span>
-      <span class="line finale">maar nu is het: EVEN TOT HIER!</span>
+      <span class="line">Twintig jaar mijn steun en toeverlaat.</span>
+      <span class="line finale">Anne, dank je wel, en heel veel plezier!</span>
 
       <div class="end">— einde —</div>
     </div>
@@ -305,10 +305,10 @@
   $('save').addEventListener('click', async () => {
     if (!videoBlob) return;
     const ext = mime.includes('webm') ? 'webm' : 'mp4';
-    const file = new File([videoBlob], 'anna-20-jaar.' + ext, { type: videoBlob.type });
+    const file = new File([videoBlob], 'anne-20-jaar.' + ext, { type: videoBlob.type });
     try {
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Twintig jaar Anna' });
+        await navigator.share({ files: [file], title: 'Twintig jaar Anne' });
         return;
       }
     } catch(err) { if (err && err.name === 'AbortError') return; }
